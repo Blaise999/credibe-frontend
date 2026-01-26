@@ -4237,5 +4237,103 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 })();
 </script>
+<script>
+(() => {
+  // ========= 1) FORCE ALL Intl currency formatting to EUR =========
+  const _NF = Intl.NumberFormat;
+
+  Intl.NumberFormat = function (locales, options) {
+    try {
+      if (options && options.style === "currency") {
+        const opts = { ...options, currency: "EUR" };
+        const loc = locales || "en-GB";
+        return new _NF(loc, opts);
+      }
+    } catch (e) {}
+    return new _NF(locales, options);
+  };
+  Intl.NumberFormat.prototype = _NF.prototype;
+
+  // ========= 2) SAFETY NET: if any script writes "$", flip it to "€" =========
+  const euroizeText = (s) => {
+    if (typeof s !== "string") return s;
+    // Replace $ before numbers e.g. "$1,200" or "USD 1,200"
+    return s
+      .replace(/\bUSD\b/gi, "EUR")
+      .replace(/\$/g, "€");
+  };
+
+  const idsToWatch = [
+    "user-balance",
+    "totalBalance",
+    "savingsAmount",
+    "creditAmount",
+    "kpi-total",
+    "kpi-avg",
+    "kpi-mom",
+    "transactions-table-sent",
+    "transactions-table-received",
+    "transactions-cards-sent",
+    "transactions-cards-received",
+  ];
+
+  const fixNode = (node) => {
+    if (!node) return;
+    if (node.nodeType === 3) {
+      node.textContent = euroizeText(node.textContent);
+      return;
+    }
+    if (node.nodeType !== 1) return;
+
+    // Fix element text
+    if (node.textContent && node.textContent.includes("$")) {
+      node.textContent = euroizeText(node.textContent);
+    }
+
+    // Fix children text nodes
+    node.querySelectorAll("*").forEach((el) => {
+      if (el.childNodes && el.childNodes.length) {
+        el.childNodes.forEach((c) => {
+          if (c.nodeType === 3 && c.textContent.includes("$")) {
+            c.textContent = euroizeText(c.textContent);
+          }
+        });
+      }
+    });
+  };
+
+  const startObserver = () => {
+    const roots = idsToWatch
+      .map((id) => document.getElementById(id))
+      .filter(Boolean);
+
+    if (!roots.length) {
+      // fallback: watch body
+      roots.push(document.body);
+    }
+
+    const obs = new MutationObserver((muts) => {
+      for (const m of muts) {
+        if (m.type === "characterData") fixNode(m.target);
+        if (m.type === "childList") {
+          m.addedNodes.forEach(fixNode);
+          fixNode(m.target);
+        }
+      }
+    });
+
+    roots.forEach((r) => obs.observe(r, { subtree: true, childList: true, characterData: true }));
+
+    // one immediate sweep
+    roots.forEach(fixNode);
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", startObserver);
+  } else {
+    startObserver();
+  }
+})();
+</script>
 </body>
 </html>. 
