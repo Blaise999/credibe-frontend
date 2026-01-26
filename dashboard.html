@@ -3574,6 +3574,25 @@ if (greet && fullNameInput) {
       balanceTag.textContent = formatMoney(data.balance);
     }
 
+    // ✅ CURRENCY FIX ONLY — force Euro everywhere
+function formatMoney(value) {
+  const n = Number(
+    String(value ?? 0)
+      .replace(/[€$₦,]/g, "")
+      .trim()
+  );
+
+  const safe = Number.isFinite(n) ? n : 0;
+
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(safe);
+}
+
+
     // 🔁 Update dashboard values
   document.getElementById("totalBalance").textContent = formatMoney(data.balance);
  document.getElementById("savingsAmount").textContent = formatMoney(data.savings);
