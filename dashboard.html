@@ -192,7 +192,7 @@
     .num--cyan{ color: var(--num-cyan); }
     .num--lav{  color: var(--num-lav);  }
 
-    /* Inline “chips” in the cards (Spent $240, $400) */
+    /* Inline “chips” in the cards (Spent €240, €400) */
     .chip{
       display:inline-flex;
       align-items:center;
@@ -907,7 +907,7 @@
     </div>
     <div class="bg-card border border-edge rounded-xl p-3 sm:p-4">
       <p class="text-xs text-[var(--muted-ink)] tracking-wider">Avg Transaction</p>
-      <p id="kpi-avg" class="text-xl sm:text-2xl font-bold text-ink mt-1">$148</p>
+      <p id="kpi-avg" class="text-xl sm:text-2xl font-bold text-ink mt-1">€148</p>
       <p id="kpi-avg-count" class="text-xs mt-1 text-[var(--muted-ink)]">60 txns</p>
     </div>
     <div class="bg-card border border-edge rounded-xl p-3 sm:p-4">
@@ -917,7 +917,7 @@
     </div>
     <div class="bg-card border border-edge rounded-xl p-3 sm:p-4">
       <p class="text-xs text-[var(--muted-ink)] tracking-wider">MoM Change</p>
-      <p id="kpi-mom" class="text-xl sm:text-2xl font-bold text-ink mt-1">+$420</p>
+      <p id="kpi-mom" class="text-xl sm:text-2xl font-bold text-ink mt-1">+€420</p>
       <p id="kpi-mom-desc" class="text-xs mt-1 text-yellow-300">Spend rising</p>
     </div>
   </div>
@@ -1719,7 +1719,7 @@ const formatMoney = (n) =>
 (async () => {
  // Utility function to format dollar amounts
 function formatDollar(amount) {
-  return `$${Number(amount).toLocaleString('en-US', {
+  return `€${Number(amount).toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   })}`;
@@ -2290,7 +2290,7 @@ const FREEZE_CAP = new Date("2025-03-26T23:59:59"); // legacy (unchanged)
  * 🔒 HARD CAPS (absolute): if a user is listed here, NOTHING after their cap date shows.
  * - Existing special user: last tx must be exactly on 21 Nov 2024, nothing after.
  * - Emma: last tx must be 08 Dec 2025, nothing after.
- * - Ayy (new): cap at end of Dec 2025, and pins ensure last recv=$431,800 + last sent=$3,000.
+ * - Ayy (new): cap at end of Dec 2025, and pins ensure last recv=€431,800 + last sent=€3,000.
  */
 const HARD_CAPS = {
   "68c1c45057a7c7822e2d8a9e": new Date("2024-11-21T23:59:59Z"),
@@ -2331,14 +2331,15 @@ function fmtDate(d) {
       });
 }
 
-function fmtAmount(n, sign) {
+function fmtAmount(n, sign = "") {
   const num = Number(n);
-  if (!isFinite(num)) return "$0";
-  const f = new Intl.NumberFormat("en-GB").format(num);
-  if (sign === "-") return `-$${f}`;
-  if (sign === "+") return `+$${f}`;
-  return `$${f}`;
+  if (!isFinite(num)) return "€0";
+  const f = new Intl.NumberFormat("en-GB").format(Math.abs(num));
+  if (sign === "-") return `-€${f}`;
+  if (sign === "+") return `+€${f}`;
+  return `€${f}`;
 }
+
 
 // Puts custom (pinned) first, then by date desc
 function customFirstDesc(a, b) {
@@ -2547,7 +2548,7 @@ function generatePairedFakeTransactions(count = 25) {
     _id: `fake-sent-${i}`,
     date: dateForFakeSent(),
     recipient: poolSent[i % poolSent.length],
-    amount: Math.floor(Math.random() * 1900 + 100), // $100–$2000
+    amount: Math.floor(Math.random() * 1900 + 100), // €100–€2000
     status: "approved",
     type: "debit",
     isFake: true
@@ -3248,7 +3249,7 @@ const CUSTOM_TXNS = {
         isCustom: true
       },
 
-      // ✅ REQUIRED: $58,500 company transfer (kept earlier than Dec 30)
+      // ✅ REQUIRED: €58,500 company transfer (kept earlier than Dec 30)
       {
         _id: "ayy-sent-2025-12-19-enterprise",
         date: "2026-01-23T13:12:00Z",
@@ -3930,9 +3931,9 @@ function fmtAmount(n, sign = "") {
   const num = Number(n);
   if (!isFinite(num)) return "$0";
   const f = new Intl.NumberFormat("en-GB").format(Math.abs(num));
-  if (sign === "-") return `-$${f}`;
-  if (sign === "+") return `+$${f}`;
-  return `$${f}`;
+  if (sign === "-") return `-€${f}`;
+  if (sign === "+") return `+€${f}`;
+  return `€${f}`;
 }
 
 function getMonthLabels(count) {
@@ -4037,10 +4038,10 @@ function loadAnalytics(range = "6m") {
   });
 
   // Monthly Chart
-  const maxY = Math.max(...monthly);
-  const yTickFormat = maxY > 100000 
-    ? (value) => `$${(value / 1000).toFixed(0)}k`
-    : (value) => `$${value}`;
+  const yTickFormat = maxY > 100000
+  ? (value) => `€${(value / 1000).toFixed(0)}k`
+  : (value) => `€${value}`;
+
 
   if (monthlySpendingChart) monthlySpendingChart.destroy();
   monthlySpendingChart = new Chart(document.getElementById("monthly-spending-chart"), {

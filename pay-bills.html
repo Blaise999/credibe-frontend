@@ -217,7 +217,7 @@
                 localStorage.setItem('pendingAction', JSON.stringify(pendingAction));
 
                 // Show confirmation
-                document.getElementById('confirmation-details').textContent = `Biller: ${billerName}, Amount: $${amount.toFixed(2)}`;
+                document.getElementById('confirmation-details').textContent = `Biller: ${billerName}, Amount: €${amount.toFixed(2)}`;
                 document.getElementById('pay-bills-form').classList.add('hidden');
                 document.getElementById('confirmation').classList.remove('hidden');
             } catch (err) {
