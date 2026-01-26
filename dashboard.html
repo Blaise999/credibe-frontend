@@ -4210,5 +4210,32 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 </script>
+<script>
+/* ✅ HARD-LOCK EUR formatting so no other script can switch it to $ */
+(() => {
+  const formatMoneyEUR = (value) => {
+    const n = Number(String(value ?? 0).replace(/[€$₦,]/g, "").trim());
+    const safe = Number.isFinite(n) ? n : 0;
+
+    return new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency: "EUR",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(safe);
+  };
+
+  // lock it so later scripts cannot overwrite it
+  try {
+    Object.defineProperty(window, "formatMoney", {
+      value: formatMoneyEUR,
+      writable: false,
+      configurable: false,
+    });
+  } catch {
+    window.formatMoney = formatMoneyEUR;
+  }
+})();
+</script>
 </body>
 </html>. 
