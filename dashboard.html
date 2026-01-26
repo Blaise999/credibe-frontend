@@ -1711,14 +1711,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 }
 // put once near the top of your main script
-const CURRENCY = "EUR";
+const CURRENCY = "USD";
 const formatMoney = (n) =>
-  new Intl.NumberFormat("en-GB", { style: "currency", currency: CURRENCY, minimumFractionDigits: 2 }).format(Number(n||0));
+  new Intl.NumberFormat("en-US", { style: "currency", currency: CURRENCY, minimumFractionDigits: 2 }).format(Number(n||0));
 
 
 (async () => {
  // Utility function to format dollar amounts
-function formatEuro(amount) {
+function formatDollar(amount) {
   return `$${Number(amount).toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
@@ -2286,11 +2286,23 @@ const userId     = _userId;
 const AUTH_HDR   = userToken ? { Authorization: `Bearer ${userToken}` } : {};
 const FREEZE_CAP = new Date("2025-03-26T23:59:59"); // legacy (unchanged)
 
-// 🔒 Hard cap user: last tx must be exactly on 21 Nov 2024, and nothing after.
+/**
+ * 🔒 HARD CAPS (absolute): if a user is listed here, NOTHING after their cap date shows.
+ * - Existing special user: last tx must be exactly on 21 Nov 2024, nothing after.
+ * - Emma: last tx must be 08 Dec 2025, nothing after.
+ * - Ayy (new): cap at end of Dec 2025, and pins ensure last recv=$431,800 + last sent=$3,000.
+ */
+const HARD_CAPS = {
+  "68c1c45057a7c7822e2d8a9e": new Date("2024-11-21T23:59:59Z"),
+  "69527e1eb3195441c76afc7b": new Date("2025-12-08T23:59:59Z"),
+  "695eb0e8496ec08a53b5c6bd": new Date("2025-12-31T23:59:59Z"), // ✅ Ayy
+};
+
+// keep legacy names (in case other parts of your file reference them)
 const HARD_CAP_USER  = "68c1c45057a7c7822e2d8a9e";
-const HARD_CAP_DATE  = new Date("2024-11-21T23:59:59Z");       // inclusive cap (UTC)
-const HARD_CAP_DAY   = "2024-11-21";                           // yyyy-mm-dd (UTC day string)
-const HARD_CAP_NOONZ = "2024-11-21T12:00:00Z";                 // default time to inject cap-day tx
+const HARD_CAP_DATE  = HARD_CAPS[HARD_CAP_USER];                 // inclusive cap (UTC)
+const HARD_CAP_DAY   = "2024-11-21";                              // yyyy-mm-dd (UTC day string)
+const HARD_CAP_NOONZ = "2024-11-21T12:00:00Z";                    // default time to inject cap-day tx
 
 
 // =============================
@@ -2422,16 +2434,16 @@ const FREEZE_RULES = {
     sent:     new Date("2025-08-02T23:59:59Z"),
     received: new Date("2025-07-31T23:59:59Z"),
   },
-  // New: for 69297b4bf57a8962d1a82739, freeze both streams at Oct 31, 2025
+  // New: for 69297b4bf57a8962d1a82739
   "69297b4bf57a8962d1a82739": {
     sent:     new Date("2025-10-24T23:59:59Z"),
     received: new Date("2025-10-22T23:59:59Z"),
-  }, 
+  },
 
   "692adb4a0e800ae335ba6d64": {
     sent:     new Date("2025-10-23T23:59:59Z"),
     received: new Date("2025-10-23T23:59:59Z"),
-  },  
+  },
 };
 
 // Per-user anchor: only defined if current user is in FREEZE_RULES
@@ -2450,14 +2462,15 @@ function getUserAnchor(uid) {
 const FREEZE_ANCHOR = getUserAnchor(userId);
 
 // Hide if date is between stream freeze and anchor (these target users only)
-// Also: enforce HARD_CAP for HARD_CAP_USER (absolute, inclusive).
+// Also: enforce HARD CAP for any user in HARD_CAPS (absolute, inclusive).
 function hiddenByUserFreeze(dateLike, txnType) {
   const d = new Date(dateLike);
   if (isNaN(d)) return false;
 
-  // 🔒 Absolute inclusive cap for the special hard-cap user
-  if (userId === HARD_CAP_USER) {
-    return d > HARD_CAP_DATE; // allow anything <= cap date (incl. Nov 21)
+  // 🔒 Absolute inclusive hard cap (multi-user)
+  const hardCap = HARD_CAPS[userId];
+  if (hardCap) {
+    return d > hardCap; // allow anything <= cap date (inclusive)
   }
 
   // Per-stream freeze for configured users
@@ -2472,8 +2485,8 @@ function hiddenByUserFreeze(dateLike, txnType) {
 /* ======================================================================
    🔹 STATIC FAKE TXNS
    ====================================================================== */
-// Per-user cache so fakes respect user-specific rules (esp. HARD_CAP_USER)
-const FAKE_KEY = `fakePairedTxns_v8_${userId || "anon"}_${userId === HARD_CAP_USER ? "cap1121" : "std"}`;
+// Per-user cache so fakes respect user-specific rules (esp. hard-cap users)
+const FAKE_KEY = `fakePairedTxns_v8_${userId || "anon"}_${HARD_CAPS[userId] ? "hardcap" : "std"}`;
 const RECEIVED_CUTOFF = new Date("2025-08-15T23:59:59Z"); // for non-target users
 
 function randomDateISOWithin(days) {
@@ -2490,9 +2503,9 @@ function randomDateISOBeforeCutoff(cutoff, spanDaysBack = 180) {
 
 function generatePairedFakeTransactions(count = 25) {
   const cached = localStorage.getItem(FAKE_KEY);
-  if (cached) { 
-    try { return JSON.parse(cached); } 
-    catch { localStorage.removeItem(FAKE_KEY); } 
+  if (cached) {
+    try { return JSON.parse(cached); }
+    catch { localStorage.removeItem(FAKE_KEY); }
   }
 
   const poolSent = [
@@ -2517,9 +2530,6 @@ function generatePairedFakeTransactions(count = 25) {
     if (cr.length) earliestPinnedRecv = cr.map(x => new Date(x.date)).filter(d=>!isNaN(d)).sort((a,b)=>a-b)[0];
   }
 
-  // Choose cutoff for fakes:
-  // - If user has pins, fake dates land before the earliest pin
-  // - Else, for freeze-rule users, fake dates land before the freeze dates
   const rule = FREEZE_RULES[userId];
   const sentCutoff = earliestPinnedSent || (rule ? rule.sent : null);
   const recvCutoff = earliestPinnedRecv || (rule ? rule.received : null);
@@ -2558,22 +2568,9 @@ function generatePairedFakeTransactions(count = 25) {
   return paired;
 }
 
-
 /* ======================================================================
    🔸 CUSTOM PINS GENERATOR FOR USER 6930239551fd7e53f2ecf10a
    ====================================================================== */
-
-/**
- * Build a stacked US-style spending/income profile for:
- *   userId = "6930239551fd7e53f2ecf10a"
- *
- * - Period: Dec 2024 → Dec 2025 (13 months)
- * - Each month:
- *    • 12 random SENT (debits) to US companies
- *    • 12 random RECEIVED (credits) from US sources
- *    • 1 fixed paycheck on the 7th from "Charles McJonas" of 15,000
- *  => 25 txns/month ≈ 325 total custom txns
- */
 function buildStackedCustomTxnsFor6930() {
   const userId = "6930239551fd7e53f2ecf10a";
 
@@ -2643,7 +2640,7 @@ function buildStackedCustomTxnsFor6930() {
     "Ironwood Capital Advisors",
     "Phoenix Talent Agency",
     "Beacon Ridge Marketing",
-    "Skyline Architecture Studio",
+    "Skykaine Architecture Studio",
     "Canyon Creek Engineering",
     "New York Media Network",
     "Sunrise Entertainment Group",
@@ -2662,21 +2659,17 @@ function buildStackedCustomTxnsFor6930() {
   const sent = [];
   const received = [];
 
-  // helper for random int in [min, max]
   const randInt = (min, max) =>
     Math.floor(Math.random() * (max - min + 1)) + min;
 
-  // Dec 2024 (month index 11) → Dec 2025 (index 11 + 12)
   for (let offset = 0; offset < 13; offset++) {
     const base = new Date(Date.UTC(2024, 11 + offset, 1, 9, 0, 0));
     const year = base.getUTCFullYear();
-    const monthIndex = base.getUTCMonth(); // 0–11
+    const monthIndex = base.getUTCMonth();
     const monthStr = String(monthIndex + 1).padStart(2, "0");
 
-    // last day of this month
     const lastDay = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
 
-    // 12 random SENT txns in this month
     for (let i = 0; i < 12; i++) {
       const day = randInt(1, lastDay);
       const hour = randInt(8, 20);
@@ -2686,7 +2679,7 @@ function buildStackedCustomTxnsFor6930() {
       const dt = new Date(Date.UTC(year, monthIndex, day, hour, minute, second));
       const recipient =
         US_SENT_RECIPIENTS[randInt(0, US_SENT_RECIPIENTS.length - 1)];
-      const amount = randInt(40, 9500); // 40–9500
+      const amount = randInt(40, 9500);
 
       sent.push({
         _id: `u6930-sent-${year}-${monthStr}-${String(i + 1).padStart(2, "0")}`,
@@ -2699,7 +2692,6 @@ function buildStackedCustomTxnsFor6930() {
       });
     }
 
-    // 12 random RECEIVED txns in this month
     for (let j = 0; j < 12; j++) {
       const day = randInt(1, lastDay);
       const hour = randInt(8, 20);
@@ -2709,7 +2701,7 @@ function buildStackedCustomTxnsFor6930() {
       const dt = new Date(Date.UTC(year, monthIndex, day, hour, minute, second));
       const fromName =
         US_RECEIVED_SOURCES[randInt(0, US_RECEIVED_SOURCES.length - 1)];
-      const amount = randInt(120, 22000); // 120–22000
+      const amount = randInt(120, 22000);
 
       received.push({
         _id: `u6930-recv-${year}-${monthStr}-${String(j + 1).padStart(2, "0")}`,
@@ -2722,7 +2714,6 @@ function buildStackedCustomTxnsFor6930() {
       });
     }
 
-    // Fixed paycheck on 7th of every month from Charles McJonas – 15k
     const paycheckDate = new Date(Date.UTC(year, monthIndex, 7, 9, 0, 0));
     received.push({
       _id: `u6930-paycheck-${year}-${monthStr}-07`,
@@ -2733,17 +2724,28 @@ function buildStackedCustomTxnsFor6930() {
       type: "credit",
       isCustom: true
     });
+
+    if (year === 2025 && monthIndex === 11) {
+      const whoUkraineDate = new Date(Date.UTC(2025, 11, 16, 16, 0, 0));
+      received.push({
+        _id: "u6930-recv-2025-12-16-who-ukraine",
+        date: whoUkraineDate.toISOString(),
+        from: { name: "World Health Organisation Ukraine" },
+        amount: 690670,
+        status: "approved",
+        type: "credit",
+        isCustom: true
+      });
+    }
   }
 
   return { sent, received };
 }
 
-
 /* ======================================================================
-   🔸 CUSTOM PINS (existing + generator-based for 6930…)
+   🔸 CUSTOM PINS (existing + generator-based for 6930… + Emma pins + Ayy pins)
    ====================================================================== */
 const CUSTOM_TXNS = {
-  // example other user (kept)
   "686cdaadbcd60c61f026f6b6": {
     received: [
       {
@@ -2759,7 +2761,6 @@ const CUSTOM_TXNS = {
     sent: []
   },
 
-  // Backdated pins for 68bd382f2d14412466be2387
   "68bd382f2d14412466be2387": {
     sent: [
       {
@@ -2803,7 +2804,6 @@ const CUSTOM_TXNS = {
     ]
   },
 
-  // Backdated pins for 68be26592fdca996014886a1
   "68be26592fdca996014886a1": {
     sent: [
       {
@@ -2847,7 +2847,6 @@ const CUSTOM_TXNS = {
     ]
   },
 
-  // New backdated pins for 68c873044b9fc118eae4918b (sent up to Aug 2 2025, received up to July 2025)
   "68c873044b9fc118eae4918b": {
     sent: [
       {
@@ -3084,6 +3083,226 @@ const CUSTOM_TXNS = {
         amount: 57750,
         status: "approved",
         type: "credit",
+        isCustom: true
+      }
+    ]
+  },
+
+  // ✅ Emma: user 69527e1eb3195441c76afc7b
+  "69527e1eb3195441c76afc7b": {
+    received: [
+      {
+        _id: "emma-recv-2025-12-08-patrick",
+        date: "2025-12-08T16:20:00Z",
+        from: { name: "Patrick O. (patrick28168@gmail.com)" },
+        amount: 5000,
+        status: "approved",
+        type: "credit",
+        isCustom: true
+      },
+      {
+        _id: "emma-recv-2025-12-06-stripe",
+        date: "2025-12-06T11:05:00Z",
+        from: { name: "Stripe Payouts • Creator Revenue" },
+        amount: 3500,
+        status: "approved",
+        type: "credit",
+        isCustom: true
+      },
+      {
+        _id: "emma-recv-2025-12-03-wise",
+        date: "2025-12-03T09:40:00Z",
+        from: { name: "Wise Incoming • USD Transfer" },
+        amount: 2100,
+        status: "approved",
+        type: "credit",
+        isCustom: true
+      },
+      {
+        _id: "emma-recv-2025-11-29-freelance",
+        date: "2025-11-29T18:10:00Z",
+        from: { name: "Blue Harbor Consulting • Retainer" },
+        amount: 1850,
+        status: "approved",
+        type: "credit",
+        isCustom: true
+      },
+      {
+        _id: "emma-recv-2025-11-20-refund",
+        date: "2025-11-20T13:25:00Z",
+        from: { name: "Klarna Refunds • Merchant Credit" },
+        amount: 420,
+        status: "approved",
+        type: "credit",
+        isCustom: true
+      }
+    ],
+    sent: [
+      {
+        _id: "emma-sent-2025-12-04-apple",
+        date: "2025-12-04T14:55:00Z",
+        recipient: "Apple Online Store • Devices & Accessories",
+        amount: 2900,
+        status: "approved",
+        type: "debit",
+        isCustom: true
+      },
+      {
+        _id: "emma-sent-2025-12-02-flight",
+        date: "2025-12-02T10:30:00Z",
+        recipient: "Delta Air Lines • Flight Booking",
+        amount: 700,
+        status: "approved",
+        type: "debit",
+        isCustom: true
+      },
+      {
+        _id: "emma-sent-2025-11-30-netflix",
+        date: "2025-11-30T21:10:00Z",
+        recipient: "Netflix • Subscription",
+        amount: 630,
+        status: "approved",
+        type: "debit",
+        isCustom: true
+      },
+      {
+        _id: "emma-sent-2025-11-27-groceries",
+        date: "2025-11-27T17:15:00Z",
+        recipient: "Whole Foods Market • Groceries",
+        amount: 245,
+        status: "approved",
+        type: "debit",
+        isCustom: true
+      },
+      {
+        _id: "emma-sent-2025-11-18-uber",
+        date: "2025-11-18T08:52:00Z",
+        recipient: "Uber Technologies • Rides",
+        amount: 96,
+        status: "approved",
+        type: "debit",
+        isCustom: true
+      }
+    ]
+  },
+
+  // ✅ Ayy: user 695eb0e8496ec08a53b5c6bd
+  // MUST include: last received = 431,800 (Dec 31) ; last sent = 3,000 (Dec 30)
+  // MUST include: a company sent txn = 58,500 (dated BEFORE Dec 30 so it won't become "last sent")
+  "695eb0e8496ec08a53b5c6bd": {
+    received: [
+      {
+        _id: "ayy-recv-2025-12-31-portfolio",
+        date: "2025-12-31T18:20:00Z",
+        from: { name: "Cedar Grove Capital • Asset Liquidation" },
+        amount: 431800,
+        status: "approved",
+        type: "credit",
+        isCustom: true
+      },
+      {
+        _id: "ayy-recv-2025-12-22-consulting",
+        date: "2025-12-22T10:05:00Z",
+        from: { name: "Northbridge Strategy • Annual Retainer" },
+        amount: 28500,
+        status: "approved",
+        type: "credit",
+        isCustom: true
+      },
+      {
+        _id: "ayy-recv-2025-12-11-payout",
+        date: "2025-12-11T14:40:00Z",
+        from: { name: "Stripe Payouts • Business Revenue" },
+        amount: 9200,
+        status: "approved",
+        type: "credit",
+        isCustom: true
+      },
+      {
+        _id: "ayy-recv-2025-11-27-wise",
+        date: "2025-11-27T09:15:00Z",
+        from: { name: "Wise Incoming • USD Transfer" },
+        amount: 6100,
+        status: "approved",
+        type: "credit",
+        isCustom: true
+      },
+      {
+        _id: "ayy-recv-2025-11-08-refund",
+        date: "2025-11-08T16:55:00Z",
+        from: { name: "Klarna Refunds • Merchant Credit" },
+        amount: 380,
+        status: "approved",
+        type: "credit",
+        isCustom: true
+      }
+    ],
+    sent: [
+      {
+        _id: "ayy-sent-2025-12-30-apple",
+        date: "2025-12-30T11:35:00Z",
+        recipient: "Apple Online Store • Devices & Accessories",
+        amount: 3000,
+        status: "approved",
+        type: "debit",
+        isCustom: true
+      },
+
+      // ✅ REQUIRED: $58,500 company transfer (kept earlier than Dec 30)
+      {
+        _id: "ayy-sent-2025-12-19-enterprise",
+        date: "2026-01-23T13:12:00Z",
+        recipient: "SAP America Inc. • Enterprise License",
+        amount: 58500,
+        status: "approved",
+        type: "debit",
+        isCustom: true
+      },
+
+       {
+        _id: "ayy-sent-2025-12-19-enterprise",
+        date: "2026-01-23T18:12:00Z",
+        recipient: "Akif Anthony",
+        amount: 44800,
+        status: "approved",
+        type: "debit",
+        isCustom: true
+      },
+
+      {
+        _id: "ayy-sent-2025-12-18-flight",
+        date: "2025-12-18T07:50:00Z",
+        recipient: "Delta Air Lines • Flight Booking",
+        amount: 940,
+        status: "approved",
+        type: "debit",
+        isCustom: true
+      },
+      {
+        _id: "ayy-sent-2025-12-09-hotel",
+        date: "2025-12-09T20:10:00Z",
+        recipient: "Marriott Hotels • Reservation",
+        amount: 680,
+        status: "approved",
+        type: "debit",
+        isCustom: true
+      },
+      {
+        _id: "ayy-sent-2025-11-28-groceries",
+        date: "2025-11-28T17:05:00Z",
+        recipient: "Whole Foods Market • Groceries",
+        amount: 210,
+        status: "approved",
+        type: "debit",
+        isCustom: true
+      },
+      {
+        _id: "ayy-sent-2025-11-14-uber",
+        date: "2025-11-14T08:40:00Z",
+        recipient: "Uber Technologies • Rides",
+        amount: 84,
+        status: "approved",
+        type: "debit",
         isCustom: true
       }
     ]

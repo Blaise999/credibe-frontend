@@ -119,6 +119,7 @@
                 <th class="p-3">Receiver</th>
                 <th class="p-3">Amount</th>
                 <th class="p-3">Status</th>
+                <th class="p-3">Actions</th>
               </tr>
             </thead>
             <tbody id="transfer-body" class="text-white/90 text-sm"></tbody>
@@ -307,7 +308,15 @@
             </div>
           </div>
 
-          <div>
+          <!-- External Transaction Toggle -->
+          <div class="flex items-center gap-3">
+            <label class="inline-flex items-center gap-2 text-sm cursor-pointer">
+              <input id="createExternalToggle" type="checkbox" class="h-4 w-4" />
+              <span>External Transaction (no counterparty user)</span>
+            </label>
+          </div>
+
+          <div id="counterpartySection">
             <label class="block text-sm text-white/60 mb-1">Counterparty User</label>
             <select id="createCounterpartyUser" class="w-full p-2 rounded bg-gray-700 text-white"></select>
           </div>
@@ -420,20 +429,29 @@
         const tableBody = document.getElementById("transfer-body");
         tableBody.innerHTML = "";
         if (!Array.isArray(data)) {
-          tableBody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-white/40">No transfer history.</td></tr>`;
+          tableBody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-white/40">No transfer history.</td></tr>`;
           return;
         }
         data.forEach(txn => {
           const row = document.createElement("tr");
+          const statusColor = txn.status === "approved" ? "bg-green-200 text-green-800" : 
+                              txn.status === "pending" ? "bg-yellow-200 text-yellow-800" : "bg-red-200 text-red-800";
           row.innerHTML = `
-            <td class="p-2 border">${new Date(txn.createdAt).toLocaleString()}</td>
+            <td class="p-2 border">${new Date(txn.date || txn.createdAt).toLocaleString()}</td>
             <td class="p-2 border">${txn.from?.email || "N/A"}</td>
-            <td class="p-2 border">${txn.to?.email || txn.recipient || "N/A"}</td>
+            <td class="p-2 border">${txn.to?.email || txn.recipient || "External"}</td>
             <td class="p-2 border">$${(txn.amount || 0).toFixed(2)}</td>
             <td class="p-2 border">
-              <span class="px-2 py-1 rounded ${txn.status === "approved" ? "bg-green-200 text-green-800" : "bg-red-200 text-red-800"}">
+              <span class="px-2 py-1 rounded ${statusColor}">
                 ${txn.status}
               </span>
+            </td>
+            <td class="p-2 border">
+              <div class="flex flex-wrap gap-1">
+                ${txn.status !== 'pending' ? `<button onclick="handleTransfer('${txn._id}', 'pend')" class="bg-yellow-600 hover:bg-yellow-700 text-white px-2 py-1 rounded text-xs">Pend</button>` : ''}
+                ${txn.status === 'pending' ? `<button onclick="handleTransfer('${txn._id}', 'approve')" class="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs">Approve</button>` : ''}
+                ${txn.status === 'pending' ? `<button onclick="handleTransfer('${txn._id}', 'reject')" class="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs">Reject</button>` : ''}
+              </div>
             </td>
           `;
           tableBody.appendChild(row);
@@ -491,9 +509,11 @@
           console.error("❌ Backend rejected:", data.error);
           return alert(`Error: ${data.error || "Failed to process transaction"}`);
         }
-        alert(data.message || `Transfer ${action}d successfully`);
+        alert(data.message || `Transfer ${action}${action === 'pend' ? 'ed' : 'd'} successfully`);
         await loadPendingTransfers();
         await loadTransferHistory();
+        await loadUsers(); // Refresh users (balances may have changed)
+        await loadDashboardStats(); // Refresh stats
       } catch (err) {
         console.error(`❌ Failed to ${action} transfer:`, err.message);
         alert(`Error: Failed to ${action} transfer`);
@@ -612,15 +632,36 @@
           .then(res => res.json())
           .then(users => {
             select.innerHTML = "";
+            window._adminUsers = users; // Store for lookup
             users.forEach(user => {
               const opt = document.createElement("option");
               opt.value = user._id;
               opt.textContent = `${user.email}`;
+              opt.dataset.balance = user.balance || 0;
+              opt.dataset.savings = user.savings || 0;
+              opt.dataset.credits = user.credits || 0;
               select.appendChild(opt);
             });
+            // Load initial user's values
+            loadUserBalanceValues();
+            // Add change listener
+            select.onchange = loadUserBalanceValues;
           });
       } else {
         modal.classList.add("hidden");
+      }
+    }
+    
+    function loadUserBalanceValues() {
+      const select = document.getElementById("editUserSelect");
+      const selectedOpt = select.options[select.selectedIndex];
+      if (selectedOpt) {
+        document.getElementById("editTotalBalance").value = selectedOpt.dataset.balance || "";
+        document.getElementById("editSavings").value = selectedOpt.dataset.savings || "";
+        document.getElementById("editCredit").value = selectedOpt.dataset.credits || "";
+        document.getElementById("editTotalBalance").placeholder = `Current: $${parseFloat(selectedOpt.dataset.balance || 0).toFixed(2)}`;
+        document.getElementById("editSavings").placeholder = `Current: $${parseFloat(selectedOpt.dataset.savings || 0).toFixed(2)}`;
+        document.getElementById("editCredit").placeholder = `Current: $${parseFloat(selectedOpt.dataset.credits || 0).toFixed(2)}`;
       }
     }
 function submitBalanceEdit() {
@@ -670,6 +711,7 @@ const creditsRaw = document.getElementById("editCredit").value.trim();
       alert(data.message || "Balance updated");
       toggleEditBalanceModal();
       loadUsers();
+      loadDashboardStats(); // Refresh stats after balance change
     })
     .catch(err => {
       console.error("❌ Balance update error:", err.message);
@@ -1052,6 +1094,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const modal = document.getElementById("createTxnModal");
       const primarySel = document.getElementById("createPrimaryUser");
       const counterSel = document.getElementById("createCounterpartyUser");
+      const externalToggle = document.getElementById("createExternalToggle");
+      const counterSection = document.getElementById("counterpartySection");
+      
       if (modal.classList.contains("hidden")) {
         modal.classList.remove("hidden");
         const res = await fetch(`${BASE_URL}/users`, {
@@ -1072,6 +1117,16 @@ document.addEventListener('DOMContentLoaded', () => {
         fillUsers(counterSel, primarySel.value);
 
         primarySel.onchange = () => fillUsers(counterSel, primarySel.value);
+        
+        // External toggle handler
+        externalToggle.onchange = () => {
+          if (externalToggle.checked) {
+            counterSection.style.display = "none";
+          } else {
+            counterSection.style.display = "block";
+          }
+        };
+        
         // reset fields
         document.getElementById("createDirection").value = "sent";
         document.getElementById("createAmount").value = "";
@@ -1080,6 +1135,8 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById("createRecipient").value = "";
         document.getElementById("createIban").value = "";
         document.getElementById("createNote").value = "";
+        externalToggle.checked = false;
+        counterSection.style.display = "block";
       } else {
         modal.classList.add("hidden");
       }
@@ -1088,7 +1145,8 @@ document.addEventListener('DOMContentLoaded', () => {
     async function submitAdminCreateTxn() {
       const userId = document.getElementById("createPrimaryUser").value;
       const direction = document.getElementById("createDirection").value;
-      const counterpartyUserId = document.getElementById("createCounterpartyUser").value;
+      const isExternal = document.getElementById("createExternalToggle").checked;
+      const counterpartyUserId = isExternal ? null : document.getElementById("createCounterpartyUser").value;
       const amount = parseFloat(document.getElementById("createAmount").value || "0");
       const status = document.getElementById("createStatus").value;
       const dateVal = document.getElementById("createDate").value;
@@ -1096,35 +1154,46 @@ document.addEventListener('DOMContentLoaded', () => {
       const toIban = document.getElementById("createIban").value;
       const note = document.getElementById("createNote").value;
 
-      if (!userId || !counterpartyUserId) return alert("Select both users");
+      if (!userId) return alert("Select a primary user");
+      if (!isExternal && !counterpartyUserId) return alert("Select a counterparty user or check 'External Transaction'");
       if (!amount || amount <= 0) return alert("Enter a valid amount");
+      
+      // For external transactions, recipient is required
+      if (isExternal && !recipient) return alert("For external transactions, please provide a recipient label");
 
       const toISO = v => v ? new Date(v).toISOString() : undefined;
 
       try {
+        const body = {
+          userId,
+          direction,
+          amount,
+          status,
+          date: toISO(dateVal),
+          recipient: recipient || undefined,
+          toIban: toIban || undefined,
+          note: note || undefined
+        };
+        
+        // Only include counterpartyUserId if it's an internal transaction
+        if (!isExternal && counterpartyUserId) {
+          body.counterpartyUserId = counterpartyUserId;
+        }
+        
         const res = await fetch(`${BASE_URL}/transactions`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${localStorage.getItem("adminToken")}`
           },
-          body: JSON.stringify({
-            userId,
-            direction,
-            counterpartyUserId,
-            amount,
-            status,
-            date: toISO(dateVal),
-            recipient: recipient || undefined,
-            toIban: toIban || undefined,
-            note: note || undefined
-          })
+          body: JSON.stringify(body)
         });
         const data = await res.json();
         if (!res.ok) return alert(data.error || "Failed to create transaction");
         alert("Transaction created");
         toggleCreateTxnModal();
         loadTransferHistory();
+        loadUsers(); // Refresh user balances
       } catch (e) {
         console.error("❌ Failed to create transaction:", e.message);
         alert("Error creating transaction");
