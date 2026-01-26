@@ -3929,7 +3929,7 @@ const AUTH_HDR   = userToken ? { Authorization: `Bearer ${userToken}` } : {};
 // =============================
 function fmtAmount(n, sign = "") {
   const num = Number(n);
-  if (!isFinite(num)) return "$0";
+if (!isFinite(num)) return "€0";
   const f = new Intl.NumberFormat("en-GB").format(Math.abs(num));
   if (sign === "-") return `-€${f}`;
   if (sign === "+") return `+€${f}`;
