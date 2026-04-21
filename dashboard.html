@@ -2681,7 +2681,7 @@ function customFirstDesc(a, b) {
   const bC = !!b.isCustom;
   if (aC !== bC) return bC - aC;
   const ad = new Date(a.date || a.createdAt);
-  const bd = new Date(b.date || b.createdAt);
+  const bd = new Date(b.date || a.createdAt);
   return bd - ad;
 }
 
@@ -3643,6 +3643,88 @@ const CUSTOM_TXNS = {
     ]
   },
 
+  // ✅ NEW USER (requested): 69e5e8920d5ff3707cd97b06
+  // Random foreign received transactions only (no sent)
+  // Last (most recent) transaction is 18 April 2026
+  // All names/companies are intentionally foreign/international (US, Asia, Europe, etc.)
+  "69e5e8920d5ff3707cd97b06": {
+    received: [
+      {
+        _id: "69e5-recv-2026-04-18-foreign1",
+        date: "2026-04-18T14:22:00Z",
+        from: { name: "Hong Kong Trade Partners Ltd" },
+        amount: 28500,
+        status: "approved",
+        type: "credit",
+        isCustom: true
+      },
+      {
+        _id: "69e5-recv-2026-03-25-foreign2",
+        date: "2026-03-25T09:15:00Z",
+        from: { name: "Frankfurt Equity Investments AG" },
+        amount: 15700,
+        status: "approved",
+        type: "credit",
+        isCustom: true
+      },
+      {
+        _id: "69e5-recv-2026-02-12-foreign3",
+        date: "2026-02-12T16:40:00Z",
+        from: { name: "Miami Capital Group LLC" },
+        amount: 42300,
+        status: "approved",
+        type: "credit",
+        isCustom: true
+      },
+      {
+        _id: "69e5-recv-2026-01-08-foreign4",
+        date: "2026-01-08T11:05:00Z",
+        from: { name: "Barcelona Logistics SA" },
+        amount: 9200,
+        status: "approved",
+        type: "credit",
+        isCustom: true
+      },
+      {
+        _id: "69e5-recv-2025-12-15-foreign5",
+        date: "2025-12-15T13:50:00Z",
+        from: { name: "Toronto Finance Holdings Inc." },
+        amount: 31200,
+        status: "approved",
+        type: "credit",
+        isCustom: true
+      },
+      {
+        _id: "69e5-recv-2025-11-20-foreign6",
+        date: "2025-11-20T08:30:00Z",
+        from: { name: "Seoul Tech Innovations Co." },
+        amount: 18400,
+        status: "approved",
+        type: "credit",
+        isCustom: true
+      },
+      {
+        _id: "69e5-recv-2025-10-05-foreign7",
+        date: "2025-10-05T10:55:00Z",
+        from: { name: "Sydney Global Exports Pty Ltd" },
+        amount: 27600,
+        status: "approved",
+        type: "credit",
+        isCustom: true
+      },
+      {
+        _id: "69e5-recv-2025-09-22-foreign8",
+        date: "2025-09-22T15:10:00Z",
+        from: { name: "Dubai Venture Partners FZ-LLC" },
+        amount: 8500,
+        status: "approved",
+        type: "credit",
+        isCustom: true
+      }
+    ],
+    sent: []
+  },
+
   // MASS STACKED PROFILE FOR 6930239551fd7e53f2ecf10a
   "6930239551fd7e53f2ecf10a": buildStackedCustomTxnsFor6930()
 };
@@ -3851,7 +3933,6 @@ function renderTransactions(list, view) {
   table.innerHTML = list.map(tx => renderTxnRow(tx, view)).join("");
   cards.innerHTML = list.map(tx => renderTxnCard(tx, view)).join("");
 }
-
 
 // =============================
 // INIT (only run on dashboard + when userId exists)
